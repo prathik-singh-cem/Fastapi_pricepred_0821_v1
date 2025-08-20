@@ -1,0 +1,91 @@
+{
+  "name": "Campus PBYH029A",
+  "origin": "Campus_PBYH029A_Hospital.xlsx",
+  "equipment": [
+    {
+      "type": "Radio Transceiver",
+      "componentGroup": "",
+      "manufacturer": "Generic",
+      "model": "Generic Antenna",
+      "description": "Indoor antenna",
+      "inventory": "N/A",
+      "qty": 298,
+      "qtyType": null,
+      "shared": true,
+      "numberOfOtherOperators": 2,
+      "classification": "Unclassified"
+    },
+    {
+      "type": "Splitter",
+      "componentGroup": "",
+      "manufacturer": "Generic",
+      "model": "Generic Splitter",
+      "description": "Signal splitter",
+      "inventory": "N/A",
+      "qty": 2,
+      "qtyType": null,
+      "shared": false,
+      "numberOfOtherOperators": 2,
+      "classification": "Unclassified"
+    },
+    {
+      "type": "Jumper",
+      "componentGroup": "",
+      "manufacturer": "Generic",
+      "model": "Generic Jumper",
+      "description": "Jumper cable",
+      "inventory": "N/A",
+      "qty": 260,
+      "qtyType": null,
+      "shared": true,
+      "numberOfOtherOperators": 3,
+      "classification": "Active"
+    },
+    {
+      "type": "Connector",
+      "componentGroup": "",
+      "manufacturer": "Generic",
+      "model": "RJ-45",
+      "description": "RJ-45 connector",
+      "inventory": "N/A",
+      "qty": 788,
+      "qtyType": null,
+      "shared": false,
+      "numberOfOtherOperators": 2,
+      "classification": "Active"
+    },
+    {
+      "type": "Network Equipment",
+      "componentGroup": "",
+      "manufacturer": "Generic",
+      "model": "iBiU / POI",
+      "description": "Interface BiU or Point of Interface",
+      "inventory": "N/A",
+      "qty": 60,
+      "qtyType": null,
+      "shared": false,
+      "numberOfOtherOperators": 2,
+      "classification": "Passive"
+    },
+    {
+      "type": "Network Equipment",
+      "componentGroup": "",
+      "manufacturer": "Generic",
+      "model": "iBiU / POI",
+      "description": "Interface BiU or Point of Interface",
+      "inventory": "N/A",
+      "qty": 3,
+      "qtyType": null,
+      "shared": false,
+      "numberOfOtherOperators": 2,
+      "classification": "Passive"
+    }
+  ],
+  "installation": {
+    "venueType": "healthcare",
+    "solutionType": "das",
+    "totalCoverageArea": 639863,
+    "numberOfFloors": 17,
+    "numberOfBuildings": 7
+  }
+}

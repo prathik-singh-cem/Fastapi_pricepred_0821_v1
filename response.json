@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "prediction": 831764.92,
+  "confidence": "High",
+  "breakdown": {
+    "randomForest": 844033.71,
+    "xgboost": 782689.75
+  },
+  "timestamp": "2025-08-17T19:50:15.440579",
+"dedicated"              : 735225.69,
+"shared_cost"            : 57169.95,
+"passive_prediction"     : 763331.75,
+"active_prediction"      : 29063.89,
+"shared_active_cost"     : 2096.91,
+"shared_passive_cost"    : 55073.04,
+"dedicated_active_cost"  : 26966.02,
+"dedicated_passive_cost" : 708258.71,
+"Miscellaneous_cost"     : 0.0
+}
