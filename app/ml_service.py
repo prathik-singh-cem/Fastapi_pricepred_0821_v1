@@ -273,12 +273,24 @@ class MLService:
                 else:
                     return (rf + xgb) / 2
                 
-            unclassified_equipment = [item for item in request.equipment if  getattr(item, 'classification', '') == 'Unclassified']
+            # First, extract unclassified equipment
+            unclassified_equipment = [item for item in request.equipment 
+                                    if getattr(item, 'classification', '') == 'Unclassified']
+
+            # Predict miscellaneous cost
             if not unclassified_equipment:
-                Miscellaneous_cost = 0
+                Miscellaneous_cost = 0.0
             else:
-                Miscellaneous_cost = 0.05*_predict_for_equipment(unclassified_equipment)
-            final_prediction1 = final_prediction-Miscellaneous_cost
+                misc = _predict_for_equipment(unclassified_equipment)
+                if misc and misc > 0:
+                    Miscellaneous_cost = 0.05 * misc
+                else:
+                    Miscellaneous_cost = 0.03 * final_prediction
+
+            # Adjust final prediction after deducting miscellaneous cost
+            final_prediction1 = final_prediction - Miscellaneous_cost
+
+
 
             # ---------- Shared Prediction Logic ----------
             shared_prediction = None
@@ -289,9 +301,9 @@ class MLService:
             for item in request.equipment:
                 if hasattr(item, 'shared') and item.shared:
                     if hasattr(item, 'equipment_type') and item.equipment_type.lower() in ['coax', 'coaxial']:
-                        adjusted_number = item.numberOfOtherOperators
+                        adjusted_number = item.numberOfOtherOperators + 1
                     else:
-                        adjusted_number = item.numberOfOtherOperators
+                        adjusted_number = item.numberOfOtherOperators + 1
 
                     adjusted_qty = item.qty / adjusted_number if adjusted_number else item.qty
                     item_copy = item.copy(update={'qty': adjusted_qty})
@@ -324,7 +336,7 @@ class MLService:
                 if shared_cost<0:
                     Miscellaneous_cost = Miscellaneous_cost+shared_cost #which will actually decrease
                     final_prediction1 = final_prediction-Miscellaneous_cost
-                    dedicated = 0.9*dedicated
+                    dedicated = 0.8*dedicated
                     shared_cost = final_prediction - dedicated
                     
                 
@@ -363,10 +375,44 @@ class MLService:
                 passive_prediction = 0.0
                 active_prediction = final_prediction1
 
+            
+                        # ---------- Handle zero predictions with fallback logic ----------
+            # If there's active equipment but model gave 0 active cost → fallback to 15% allocation
+            if active_prediction == 0.0 and active_equipment:
+                active_prediction = 0.15 * final_prediction1
+                passive_prediction = final_prediction1 - active_prediction
+
+            # If there's passive equipment but model gave 0 passive cost → fallback to 15% allocation
+            if passive_prediction == 0.0 and passive_equipment:
+                passive_prediction = 0.15 * final_prediction1
+                active_prediction = final_prediction1 - passive_prediction
+
+            # If neither active nor passive equipment exists → ensure predictions sum to total
+            if not active_equipment and not passive_equipment:
+                active_prediction = 0.0
+                passive_prediction = final_prediction1
+
+
+            # ---------- Fallback for Shared vs Dedicated Predictions ----------
+            # Check if there is any shared equipment
+            has_shared_equipment = any(getattr(item, 'shared', False) for item in request.equipment)
+            has_dedicated_equipment = any(getattr(item, 'shared', True) for item in request.equipment)
+
+            # If model predicted 0 shared cost but we actually have shared equipment → fallback to 15%
+            if shared_cost == 0.0 and has_shared_equipment:
+                shared_cost = 0.15 * final_prediction1
+                dedicated = final_prediction1 - shared_cost
+
+            # If there's no shared equipment, assign full cost to dedicated
+            if not has_shared_equipment:
+                shared_cost = 0.0
+                dedicated = final_prediction1
+
+
+
             active_equipment = [item for item in request.equipment if getattr(item, 'classification', '') == 'Active']
             if len(active_equipment) == 0:
                 active_prediction = 0
-
 
 
             shared_active_equipment = [item for item in request.equipment if getattr(item, 'shared', False) and getattr(item, 'classification', '') == 'Active']
@@ -374,21 +420,20 @@ class MLService:
             dedicated_active_equipment = [item for item in request.equipment if not getattr(item, 'shared', False) and getattr(item, 'classification', '') == 'Active']
             dedicated_passive_equipment = [item for item in request.equipment if not getattr(item, 'shared', False) and getattr(item, 'classification', '') == 'Passive']
 
-            shared_active_cost = _predict_for_equipment(shared_active_equipment)
-            shared_passive_cost = _predict_for_equipment(shared_passive_equipment)
-            dedicated_active_cost = _predict_for_equipment(dedicated_active_equipment)
-            dedicated_passive_cost = _predict_for_equipment(dedicated_passive_equipment)
+            shared_active_cost = _predict_for_equipment(shared_active_equipment) if shared_active_equipment else 0.0
+            shared_passive_cost = _predict_for_equipment(shared_passive_equipment) if shared_passive_equipment else 0.0
+            dedicated_active_cost = _predict_for_equipment(dedicated_active_equipment) if dedicated_active_equipment else 0.0
+            dedicated_passive_cost = _predict_for_equipment(dedicated_passive_equipment) if dedicated_passive_equipment else 0.0
 
 
-            # Make splits proportional instead of re-predicting full model
-            #below is added to test 0818
+      
             total_active = active_prediction
             total_passive = passive_prediction
             total_shared = shared_cost
             total_dedicated = dedicated
 
             # Pro-rate active between shared vs dedicated
-            if not shared_active_cost:
+            if not shared_active_equipment:
                 shared_active_cost = 0.0
                 dedicated_active_cost = total_active
             elif not dedicated_active_equipment:
@@ -400,6 +445,7 @@ class MLService:
                     dedicated_active_cost = 0.0
                     shared_active_cost = 0.0
                 else:
+                    
                     shared_active_cost = (total_shared / (total_shared + total_dedicated)) * total_active if (total_shared + total_dedicated) else 0
                     dedicated_active_cost = total_active - shared_active_cost
 
@@ -431,7 +477,62 @@ class MLService:
                 shared_passive_cost= final_prediction1
 
             if not shared_active_equipment and not shared_passive_equipment and not  dedicated_passive_equipment:
-                dedicated_active_cost= final_prediction1          
+                dedicated_active_cost= final_prediction1
+
+            # For passive equipment
+            if shared_passive_equipment and dedicated_passive_equipment:
+                if unclassified_equipment:
+                    shared_active_cost = final_prediction1 * 0.30
+                    dedicated_active_cost = final_prediction1 * 0.65
+                    Miscellaneous_cost = final_prediction1*0.05
+
+                if shared_passive_cost == 0.0 or dedicated_passive_cost == 0.0:
+                    shared_passive_cost = final_prediction1 * 0.30
+                    dedicated_passive_cost = final_prediction1 * 0.70
+
+            # For active equipment
+            if shared_active_equipment and dedicated_active_equipment:
+
+                if shared_active_cost == 0.0 or dedicated_active_cost == 0.0:
+                    if unclassified_equipment and Miscellaneous_cost==0.0:
+                        shared_active_cost = final_prediction1 * 0.30
+                        dedicated_active_cost = final_prediction1 * 0.65
+                        Miscellaneous_cost = final_prediction1*0.05
+
+
+                    else:
+                        shared_active_cost = final_prediction1 * 0.30
+                        dedicated_active_cost = final_prediction1 * 0.70
+
+
+            if not unclassified_equipment:
+                Miscellaneous_cost = 0.0
+            else:
+                misc = _predict_for_equipment(unclassified_equipment)
+                if misc and misc > 0 and misc==final_prediction:
+                    Miscellaneous_cost = 0.05 * misc
+                    if shared_active_cost and (shared_active_cost-Miscellaneous_cost>0):
+                        shared_active_cost = shared_active_cost-Miscellaneous_cost
+                    elif dedicated_active_cost and (dedicated_active_cost-Miscellaneous_cost>0):
+                        dedicated_active_cost = dedicated_active_cost-Miscellaneous_cost
+                    elif shared_passive_cost and (shared_passive_cost-Miscellaneous_cost>0):
+                        shared_passive_cost = shared_passive_cost-Miscellaneous_cost
+                    elif dedicated_passive_cost and (dedicated_passive_cost-Miscellaneous_cost>0):
+                        dedicated_passive_cost = dedicated_passive_cost-Miscellaneous_cost
+
+                elif misc > 0:
+                    Miscellaneous_cost = Miscellaneous_cost
+                else:
+                    Miscellaneous_cost = 0.002 * final_prediction
+                    if shared_active_cost and (shared_active_cost-Miscellaneous_cost>0):
+                        shared_active_cost = shared_active_cost-Miscellaneous_cost
+                    elif dedicated_active_cost and (dedicated_active_cost-Miscellaneous_cost>0):
+                        dedicated_active_cost = dedicated_active_cost-Miscellaneous_cost
+                    elif shared_passive_cost and (shared_passive_cost-Miscellaneous_cost>0):
+                        shared_passive_cost = shared_passive_cost-Miscellaneous_cost
+                    elif dedicated_passive_cost and (dedicated_passive_cost-Miscellaneous_cost>0):
+                        dedicated_passive_cost = dedicated_passive_cost-Miscellaneous_cost                    
+         
 
             # ---------- Response ----------
             response = PredictionResponse(
@@ -453,6 +554,27 @@ class MLService:
                 Miscellaneous_cost = round(Miscellaneous_cost,2),
                 timestamp=datetime.utcnow()
             )  # updated0817
+
+            response = PredictionResponse(
+                success=True,
+                prediction=round(final_prediction, 2),
+                confidence=confidence,
+                breakdown=PredictionBreakdown(
+                    randomForest=round(rf_pred, 2),
+                    xgboost=round(xgb_pred, 2)
+                ),
+                dedicated=round(dedicated, 2) if has_dedicated_equipment else 0.0,
+                shared_cost=round(shared_cost, 2) if has_shared_equipment else 0.0,
+                passive_prediction=round(passive_prediction, 2) if passive_equipment else 0.0,
+                active_prediction=round(active_prediction, 2) if active_equipment else 0.0,
+                shared_active_cost=round(shared_active_cost, 2) if shared_active_equipment else 0.0,
+                shared_passive_cost=round(shared_passive_cost, 2) if shared_passive_equipment else 0.0,
+                dedicated_active_cost=round(dedicated_active_cost, 2) if dedicated_active_equipment else 0.0,
+                dedicated_passive_cost=round(dedicated_passive_cost, 2) if dedicated_passive_equipment else 0.0,
+                Miscellaneous_cost=round(Miscellaneous_cost, 2) if unclassified_equipment else 0.0,
+                timestamp=datetime.utcnow()
+            )
+
 
             return response
 
